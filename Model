@@ -1,0 +1,274 @@
+# import tensorflow as tf
+# from tensorflow.keras.applications import InceptionV3
+# from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D
+# from tensorflow.keras.models import Model
+# from tensorflow.keras.preprocessing.image import ImageDataGenerator
+# from tensorflow.keras.callbacks import EarlyStopping
+# import os
+
+# # File paths
+# train_dir = "C:/ML_Project/Dataset/Train"
+# val_dir = "C:/ML_Project/Dataset/Validate"
+# test_dir = "C:/ML_Project/Dataset/Test"
+
+# # Data augmentation and preprocessing
+# train_datagen = ImageDataGenerator( 
+#     rescale=1.0/255,           # Normalize pixel values to [0, 1]
+#     rotation_range=30,         # Random rotation
+#     width_shift_range=0.1,     # Horizontal shift
+#     height_shift_range=0.1,    # Vertical shift
+#     zoom_range=0.2,            # Random zoom
+#     validation_split=0.2       # Split training data into training and validation subsets
+# )
+
+# test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# # Load datasets
+# train_generator = train_datagen.flow_from_directory(
+#     train_dir,
+#     target_size=(224, 224),   # Resize images to match InceptionV3 input
+#     batch_size=16,
+#     class_mode='categorical',
+#     subset='training'
+# )
+
+# val_generator = train_datagen.flow_from_directory(
+#     train_dir,
+#     target_size=(224, 224),
+#     batch_size=32,
+#     class_mode='categorical',
+#     subset='validation'
+# )
+
+# test_generator = test_datagen.flow_from_directory(
+#     test_dir,
+#     target_size=(224, 224),
+#     batch_size=32,
+#     class_mode='categorical'
+# )
+
+# # Load pre-trained InceptionV3 model (excluding top layer)
+# pre_trained_model = InceptionV3(
+#     input_shape=(224, 224, 3), 
+#     include_top=False,         # Exclude the top fully connected layers
+#     weights='imagenet'
+# )
+
+# # Freeze pre-trained model layers to retain features
+# for layer in pre_trained_model.layers:
+#     layer.trainable = False
+
+# # Build the model
+# last_output = pre_trained_model.output
+# x = GlobalAveragePooling2D()(last_output)  # Replace Flatten with GAP for better generalization
+# x = Dense(128, activation='relu')(x)      # Fully connected layer
+# x = Dropout(0.5)(x)                       # Dropout for regularization
+# output = Dense(train_generator.num_classes, activation='softmax')(x)  # Output layer
+
+# model = Model(pre_trained_model.input, output)
+
+# # Compile the model
+# model.compile(
+#     optimizer='adam',
+#     loss='categorical_crossentropy',
+#     metrics=['accuracy']
+# )
+
+# # Train the model
+# early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+# history = model.fit(
+#     train_generator,
+#     validation_data=val_generator,
+#     epochs=50,
+#     callbacks=[early_stopping],
+#     steps_per_epoch=train_generator.samples // train_generator.batch_size,
+#     validation_steps=val_generator.samples // val_generator.batch_size
+# )
+
+# # Evaluate the model on test data
+# test_loss, test_accuracy = model.evaluate(test_generator)
+# print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}")
+
+# # Save the model
+# model.save('fruit_classification_model.h5')
+
+# # Example: Predict a single image
+# from tensorflow.keras.preprocessing.image import load_img, img_to_array
+# import numpy as np
+
+# # Load and preprocess a single image
+# image_path = "C:/ML_Project/Dataset/Test/Citrus/Lemon/lemon resized (1).jpg"
+# img = load_img(image_path, target_size=(224, 224))
+# img_array = img_to_array(img) / 255.0
+# img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+
+# # Make a prediction
+# predictions = model.predict(img_array)
+# predicted_class = np.argmax(predictions, axis=1)
+# class_labels = list(train_generator.class_indices.keys())
+# print(f"Predicted class: {class_labels[predicted_class[0]]}")
+
+# #Save model
+# model.save('fruit_classification_model.h5')
+
+
+import tensorflow as tf
+from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping
+import os
+import pickle
+import numpy as np
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+
+# File paths
+train_dir = "C:/ML_Project/Dataset/Train"
+citrus_train_dir = "C:/ML_Project/Dataset/Citrus/Train"
+citrus_val_dir = "C:/ML_Project/Dataset/Citrus/Validate"
+
+# Data augmentation and preprocessing
+train_datagen = ImageDataGenerator(
+    rescale=1.0/255,
+    rotation_range=30,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    zoom_range=0.2,
+    validation_split=0.2
+)
+
+test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# Early stopping callback
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+# ------------------------ First-Stage Model ------------------------ #
+# Binary classification: Citrus vs. Non-Citrus
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(224, 224),
+    batch_size=16,
+    class_mode='binary',  # Binary classification
+    subset='training'
+)
+
+val_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='binary',  # Binary classification
+    subset='validation'
+)
+
+# Load pre-trained InceptionV3 model for first stage
+pre_trained_model_stage1 = InceptionV3(input_shape=(224, 224, 3), include_top=False, weights='imagenet')
+
+# Freeze pre-trained model layers
+for layer in pre_trained_model_stage1.layers:
+    layer.trainable = False
+
+# Add classification layers for the first stage
+last_output_stage1 = pre_trained_model_stage1.output
+x = GlobalAveragePooling2D()(last_output_stage1)
+x = Dense(128, activation='relu')(x)
+x = Dropout(0.5)(x)
+output_stage1 = Dense(1, activation='sigmoid')(x)  # Binary output
+
+first_stage_model = Model(pre_trained_model_stage1.input, output_stage1)
+
+# Compile first-stage model
+first_stage_model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+
+# Train first-stage model
+first_stage_model.fit(
+    train_generator,
+    validation_data=val_generator,
+    epochs=50,
+    callbacks=[early_stopping],
+    steps_per_epoch=train_generator.samples // train_generator.batch_size,
+    validation_steps=val_generator.samples // val_generator.batch_size
+)
+
+# Save first-stage model
+first_stage_model.save('citrus_vs_non_citrus_model.h5')
+
+# ------------------------ Second-Stage Model ------------------------ #
+# Multi-class classification: Specific Citrus types
+citrus_train_generator = train_datagen.flow_from_directory(
+    citrus_train_dir,
+    target_size=(224, 224),
+    batch_size=16,
+    class_mode='categorical',  # Multi-class classification
+    subset='training'
+)
+
+citrus_val_generator = train_datagen.flow_from_directory(
+    citrus_val_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical',  # Multi-class classification
+    subset='validation'
+)
+
+# Load pre-trained InceptionV3 model for second stage
+pre_trained_model_stage2 = InceptionV3(input_shape=(224, 224, 3), include_top=False, weights='imagenet')
+
+# Freeze pre-trained model layers
+for layer in pre_trained_model_stage2.layers:
+    layer.trainable = False
+
+# Add classification layers for the second stage
+last_output_stage2 = pre_trained_model_stage2.output
+x = GlobalAveragePooling2D()(last_output_stage2)
+x = Dense(128, activation='relu')(x)
+x = Dropout(0.5)(x)
+output_stage2 = Dense(citrus_train_generator.num_classes, activation='softmax')(x)  # Multi-class output
+
+second_stage_model = Model(pre_trained_model_stage2.input, output_stage2)
+
+# Compile second-stage model
+second_stage_model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Train second-stage model
+second_stage_model.fit(
+    citrus_train_generator,
+    validation_data=citrus_val_generator,
+    epochs=50,
+    callbacks=[early_stopping],
+    steps_per_epoch=citrus_train_generator.samples // citrus_train_generator.batch_size,
+    validation_steps=citrus_val_generator.samples // citrus_val_generator.batch_size
+)
+
+# Save second-stage model
+second_stage_model.save('citrus_classification_model.h5')
+
+# Save class labels for second stage
+citrus_labels = list(citrus_train_generator.class_indices.keys())
+with open('citrus_class_labels.pkl', 'wb') as f:
+    pickle.dump(citrus_labels, f)
+
+# ------------------------ Prediction Function ------------------------ #
+def predict_fruit(image_path, first_stage_model, second_stage_model, citrus_class_labels):
+    # Preprocess the image
+    img = load_img(image_path, target_size=(224, 224))
+    img_array = img_to_array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    # First-stage prediction: Citrus vs. Non-Citrus
+    is_citrus = first_stage_model.predict(img_array)[0][0] > 0.5
+    if not is_citrus:
+        return "Non-Citrus Fruit"
+
+    # Second-stage prediction: Specific Citrus classification
+    citrus_predictions = second_stage_model.predict(img_array)
+    citrus_class_idx = np.argmax(citrus_predictions)
+    return citrus_class_labels[citrus_class_idx]

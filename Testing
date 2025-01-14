@@ -1,0 +1,92 @@
+# import tensorflow as tf
+# import numpy as np
+# from tensorflow.keras.utils import img_to_array, load_img
+# import os
+
+# # Load the trained model
+# model = tf.keras.models.load_model('fruit_classification_model.h5')  # Update with your model filename
+# model.summary()
+# print(f"Expected input shape: {model.input_shape}")
+
+# # Target size should match the model's input size
+# _target_size = (224, 224)  # Update this to match your model's input size
+# folder_path = './Test images'  # Folder containing test images
+
+# # Define class labels
+# class_labels = ["Non-Fruit", "Non-Citrus Fruit", "Citrus Fruit"]
+
+# for image in os.listdir(folder_path):
+#     # Process the image
+#     image_path = os.path.join(folder_path, image)
+#     input_image = load_img(image_path, target_size=_target_size)  # Resize to match the model's input size
+#     image_array = img_to_array(input_image) / 255.0  # Normalize pixel values to [0, 1]
+#     image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
+
+#     # Predict the class
+#     prediction = model.predict(image_array)
+#     predicted_class_idx = np.argmax(prediction)
+#     predicted_class_label = class_labels[predicted_class_idx]
+
+#     print(f"Image: {image}")
+#     print(f"Predicted Class: {predicted_class_label} (Confidence: {prediction[0][predicted_class_idx]:.2f})")
+
+#     # Further classification for citrus fruits
+#     if predicted_class_label == "Citrus Fruit":
+#         # Additional logic for distinguishing lemons within citrus
+#         lemon_confidence = prediction[0][predicted_class_idx]  # Example: Assume this maps to lemons
+#         print(f"This citrus fruit is likely a lemon. (Confidence: {lemon_confidence:.2f})")
+#     elif predicted_class_label == "Non-Citrus Fruit":
+#         print("This is a fruit, but it is not a citrus fruit.")
+#     else:
+#         print("This is not a fruit.")
+#     print("-" * 40)
+
+
+import tensorflow as tf
+import numpy as np
+from tensorflow.keras.utils import img_to_array, load_img
+import os
+
+# Load the trained model
+model = tf.keras.models.load_model('fruit_classification_model.h5')
+model.summary()
+print(f"Expected input shape: {model.input_shape}")
+
+# Target size should match the model's input size
+_target_size = (224, 224)  # Update this to match your model's input size
+folder_path = './Test images'  # Folder containing test images
+
+# Load class labels dynamically
+# Ensure to save and load this mapping during training
+class_labels = ["Lemon", "Orange", "Apple", "Lime"]  # Replace with your actual class labels
+
+for image in os.listdir(folder_path):
+    # Process the image
+    image_path = os.path.join(folder_path, image)
+    
+    try:
+        input_image = load_img(image_path, target_size=_target_size)  # Resize to match the model's input size
+    except Exception as e:
+        print(f"Error loading image {image}: {e}")
+        continue
+
+    image_array = img_to_array(input_image) / 255.0  # Normalize pixel values to [0, 1]
+    image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
+
+    # Predict the class
+    prediction = model.predict(image_array)
+    predicted_class_idx = np.argmax(prediction)
+    predicted_class_label = class_labels[predicted_class_idx]
+
+    print(f"Image: {image}")
+    print(f"Predicted Class: {predicted_class_label} (Confidence: {prediction[0][predicted_class_idx]:.2f})")
+
+    if predicted_class_label == "Lemon":
+        print("This citrus fruit is a lemon.")
+    elif predicted_class_label in ["Orange", "Lime"]:  # Adjust based on your citrus classes
+        print("This is another type of citrus fruit.")
+    elif predicted_class_label == "Apple":  # Non-citrus examples
+        print("This is a fruit, but it is not a citrus fruit.")
+    else:
+        print("This is not a fruit.")
+    print("-" * 40)
